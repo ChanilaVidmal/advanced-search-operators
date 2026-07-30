@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { AutocompleteInput } from '@/components/ui/AutocompleteInput';
 import { Dialog } from '@/components/ui/Dialog';
 import { operators, searchOperators } from '@/data/operators';
+import { engines, defaultEngineId, getEngine, getEngineSearchUrl } from '@/data/engines';
 import { useStorage } from '@/hooks/useStorage';
 import { validateQuery } from '@/search/validator';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -12,11 +13,12 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 import { CSS } from '@dnd-kit/utilities';
 import type { Operator, OperatorBlock, Template, HistoryEntry } from '@/types/operator';
 
-function SortableBlock({ block, onUpdateValue, onRemove, onDuplicate }: {
+function SortableBlock({ block, onUpdateValue, onRemove, onDuplicate, incompatible }: {
   block: OperatorBlock;
   onUpdateValue: (id: string, value: string) => void;
   onRemove: (id: string) => void;
   onDuplicate: (id: string) => void;
+  incompatible?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id });
 
@@ -36,8 +38,9 @@ function SortableBlock({ block, onUpdateValue, onRemove, onDuplicate }: {
       >
         <GripVertical className="h-4 w-4" />
       </button>
-      <code className="rounded bg-muted px-2 py-1 text-sm font-mono text-primary shrink-0">
+      <code className={`rounded px-2 py-1 text-sm font-mono shrink-0 ${incompatible ? 'bg-destructive/10 text-destructive line-through' : 'bg-muted text-primary'}`}>
         {block.operator}
+        {incompatible && <span className="ml-1 text-[10px] not-italic" title="Not supported by current engine">!</span>}
       </code>
       <Input
         value={block.value}
@@ -65,6 +68,7 @@ export function SearchBuilder() {
   const [blocks, setBlocks] = useStorage<OperatorBlock[]>('builderBlocks', []);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState('');
+  const [engineId, setEngineId] = useStorage<string>('searchEngine', defaultEngineId);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -139,7 +143,8 @@ export function SearchBuilder() {
   }, [query]);
 
   const handleSearch = useCallback(() => {
-    chrome.tabs.create({ url: `https://www.google.com/search?q=${encodeURIComponent(query)}` });
+    const url = getEngineSearchUrl(engineId, query);
+    chrome.tabs.create({ url });
     const entry: HistoryEntry = {
       id: crypto.randomUUID(),
       query,
@@ -159,7 +164,7 @@ export function SearchBuilder() {
       const existing: HistoryEntry[] = JSON.parse(localStorage.getItem('history') || '[]');
       localStorage.setItem('history', JSON.stringify([entry, ...existing].slice(0, 200)));
     }
-  }, [query, blocks]);
+  }, [query, blocks, engineId]);
 
   const handleClear = useCallback(() => {
     setBlocks([]);
@@ -191,15 +196,35 @@ export function SearchBuilder() {
     setSaveTags('');
   };
 
-  const availableOperators = useMemo(
-    () => (pickerSearch ? searchOperators(pickerSearch) : operators),
-    [pickerSearch]
-  );
+  const engineCategories = useMemo(() => getEngine(engineId).categories, [engineId]);
+
+  const availableOperators = useMemo(() => {
+    const filtered = operators.filter((op) => engineCategories.includes(op.category));
+    return pickerSearch ? searchOperators(pickerSearch).filter((op) => engineCategories.includes(op.category)) : filtered;
+  }, [pickerSearch, engineCategories]);
 
 
 
   return (
     <div className="flex h-full flex-col">
+      {/* Engine selector */}
+      <div className="border-b px-3 py-2">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-muted-foreground shrink-0">Search Engine</label>
+          <select
+            value={engineId}
+            onChange={(e) => setEngineId(e.target.value)}
+            className="flex-1 h-7 rounded-md border bg-background px-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            {engines.map((eng) => (
+              <option key={eng.id} value={eng.id}>
+                {eng.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       {/* Validation bar */}
       {validationIssues.length > 0 && (
         <div className="border-b px-3 py-2 space-y-1">
@@ -238,6 +263,7 @@ export function SearchBuilder() {
                 onUpdateValue={updateValue}
                 onRemove={removeBlock}
                 onDuplicate={duplicateBlock}
+                incompatible={block.operatorData ? !engineCategories.includes(block.operatorData.category) : false}
               />
             ))}
           </SortableContext>
