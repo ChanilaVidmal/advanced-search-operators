@@ -212,10 +212,15 @@ export function SearchBuilder() {
   const handleNlParse = useCallback(() => {
     const result = parseNaturalLanguage(nlInput);
     if (!result || result.blocks.length === 0) return;
-    setBlocks((prev) => [...prev, ...result.blocks]);
+    const allOps = [...operators, ...allEngineOps];
+    const enriched = result.blocks.map((b) => {
+      const opData = allOps.find((o) => o.operator === b.operator);
+      return { ...b, operatorData: opData };
+    });
+    setBlocks((prev) => [...prev, ...enriched]);
     setNlInput('');
     setShowNl(false);
-  }, [nlInput, setBlocks]);
+  }, [nlInput, setBlocks, allEngineOps]);
 
   const availableOperators = useMemo(() => {
     const filtered = [

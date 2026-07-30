@@ -3,7 +3,7 @@ import { Moon, Sun, Search } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 
 export function Header() {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, themeLock, setThemeLock } = useTheme();
 
   return (
     <header className="flex items-center justify-between border-b px-4 py-2 bg-card">
@@ -15,7 +15,7 @@ export function Header() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={toggleTheme}
+          onClick={() => setThemeLock(themeLock === 'auto' ? 'light' : themeLock === 'light' ? 'dark' : 'auto')}
           aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
         >
           {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}

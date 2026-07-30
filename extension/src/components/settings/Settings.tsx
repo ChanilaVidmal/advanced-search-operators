@@ -4,11 +4,10 @@ import { useStorage } from '@/hooks/useStorage';
 import { engines } from '@/data/engines';
 
 export function Settings() {
-  const { theme } = useTheme();
+  const { theme, themeLock, setThemeLock } = useTheme();
   const [searchEngine, setSearchEngine] = useStorage<string>('searchEngine', 'google');
   const [maxHistory, setMaxHistory] = useStorage<number>('maxHistory', 200);
   const [autoSaveHistory, setAutoSaveHistory] = useStorage<boolean>('autoSaveHistory', true);
-  const [themeLock, setThemeLock] = useStorage<string>('themeLock', 'auto');
   const [exportFormat, setExportFormat] = useStorage<string>('exportFormat', 'json');
 
   const shortcuts = [
@@ -43,7 +42,7 @@ export function Settings() {
             <div className="flex items-center gap-2">
               <select
                 value={themeLock}
-                onChange={(e) => setThemeLock(e.target.value)}
+                onChange={(e) => setThemeLock(e.target.value as 'auto' | 'light' | 'dark')}
                 className="rounded-md border border-input bg-background px-2 py-1 text-xs"
               >
                 <option value="auto">Auto (follow system)</option>
