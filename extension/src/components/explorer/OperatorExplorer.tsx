@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
-import { Search, Copy, Star, ChevronDown, SortAsc, Filter } from 'lucide-react';
+import { Copy, Star, ChevronDown, SortAsc, Filter, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Dialog } from '@/components/ui/Dialog';
+import { AutocompleteInput } from '@/components/ui/AutocompleteInput';
 import { OperatorDetail } from './OperatorDetail';
 import { RecentlyViewed } from './RecentlyViewed';
 import { operators, searchOperators, getCategoriesWithCount } from '@/data/operators';
@@ -87,15 +87,13 @@ export function OperatorExplorer() {
     <div className="flex h-full flex-col">
       {/* Search and filters */}
       <div className="border-b p-3 space-y-2">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search ${operators.length} operators...`}
-            className="pl-8"
-          />
-        </div>
+        <AutocompleteInput
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onSelect={(op) => handleView(op)}
+          suggestions={query ? searchOperators(query) : []}
+          placeholder={`Search ${operators.length} operators...`}
+        />
 
         {/* Category pills */}
         <div className="flex flex-wrap gap-1.5">
