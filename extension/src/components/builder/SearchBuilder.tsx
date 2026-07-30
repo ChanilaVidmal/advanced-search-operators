@@ -69,6 +69,10 @@ export function SearchBuilder() {
   const [showPicker, setShowPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState('');
   const [engineId, setEngineId] = useStorage<string>('searchEngine', defaultEngineId);
+  const safeEngineId = useMemo(() => {
+    const found = engines.find((e) => e.id === engineId);
+    return found ? engineId : defaultEngineId;
+  }, [engineId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -143,7 +147,7 @@ export function SearchBuilder() {
   }, [query]);
 
   const handleSearch = useCallback(() => {
-    const url = getEngineSearchUrl(engineId, query);
+    const url = getEngineSearchUrl(safeEngineId, query);
     chrome.tabs.create({ url });
     const entry: HistoryEntry = {
       id: crypto.randomUUID(),
@@ -164,7 +168,7 @@ export function SearchBuilder() {
       const existing: HistoryEntry[] = JSON.parse(localStorage.getItem('history') || '[]');
       localStorage.setItem('history', JSON.stringify([entry, ...existing].slice(0, 200)));
     }
-  }, [query, blocks, engineId]);
+  }, [query, blocks, safeEngineId]);
 
   const handleClear = useCallback(() => {
     setBlocks([]);
@@ -174,9 +178,9 @@ export function SearchBuilder() {
   const [saveName, setSaveName] = useState('');
   const [saveDesc, setSaveDesc] = useState('');
   const [saveTags, setSaveTags] = useState('');
-  const [templates, setTemplates] = useStorage<Template[]>('templates', []);
+  const [, setTemplates] = useStorage<Template[]>('templates', []);
 
-  const handleSaveTemplate = () => {
+  const handleSaveTemplate = useCallback(() => {
     if (!saveName.trim()) return;
     const now = new Date().toISOString();
     const tpl: Template = {
@@ -189,14 +193,14 @@ export function SearchBuilder() {
       createdAt: now,
       updatedAt: now,
     };
-    setTemplates([...templates, tpl]);
+    setTemplates((prev) => [...prev, tpl]);
     setSaveDialog(false);
     setSaveName('');
     setSaveDesc('');
     setSaveTags('');
-  };
+  }, [saveName, saveDesc, saveTags, blocks, setTemplates]);
 
-  const engineCategories = useMemo(() => getEngine(engineId).categories, [engineId]);
+  const engineCategories = useMemo(() => getEngine(safeEngineId).categories, [safeEngineId]);
 
   const availableOperators = useMemo(() => {
     const filtered = operators.filter((op) => engineCategories.includes(op.category));
@@ -212,7 +216,7 @@ export function SearchBuilder() {
         <div className="flex items-center gap-2">
           <label className="text-xs font-medium text-muted-foreground shrink-0">Search Engine</label>
           <select
-            value={engineId}
+            value={safeEngineId}
             onChange={(e) => setEngineId(e.target.value)}
             className="flex-1 h-7 rounded-md border bg-background px-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
           >

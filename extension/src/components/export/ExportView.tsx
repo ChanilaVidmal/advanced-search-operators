@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Share2, ClipboardCopy, FileJson, ExternalLink } from 'lucide-react';
+import { useMemo, useState, useRef, useEffect } from 'react';
+import { Share2, ClipboardCopy, FileJson, FileText, Table, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStorage } from '@/hooks/useStorage';
 import { exportTemplatesJSON, exportTemplatesTXT, exportTemplatesMarkdown, exportTemplatesCSV,
@@ -28,9 +28,13 @@ export function ExportView() {
     [builderBlocks]
   );
 
+  const notifyTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(notifyTimer.current), []);
+
   const notify = (msg: string) => {
     setNotification(msg);
-    setTimeout(() => setNotification(''), 2500);
+    clearTimeout(notifyTimer.current);
+    notifyTimer.current = setTimeout(() => setNotification(''), 2500);
   };
 
   const handleCopyShare = () => {
@@ -101,13 +105,13 @@ export function ExportView() {
                 <FileJson className="h-5 w-5" /> <span className="text-xs">JSON</span>
               </Button>
               <Button variant="outline" className="h-20 flex-col gap-1" onClick={() => exportTemplate('txt')} disabled={templates.length === 0}>
-                <FileJson className="h-5 w-5" /> <span className="text-xs">Plain Text</span>
+                <FileText className="h-5 w-5" /> <span className="text-xs">Plain Text</span>
               </Button>
               <Button variant="outline" className="h-20 flex-col gap-1" onClick={() => exportTemplate('md')} disabled={templates.length === 0}>
-                <FileJson className="h-5 w-5" /> <span className="text-xs">Markdown</span>
+                <FileText className="h-5 w-5" /> <span className="text-xs">Markdown</span>
               </Button>
               <Button variant="outline" className="h-20 flex-col gap-1" onClick={() => exportTemplate('csv')} disabled={templates.length === 0}>
-                <FileJson className="h-5 w-5" /> <span className="text-xs">CSV</span>
+                <Table className="h-5 w-5" /> <span className="text-xs">CSV</span>
               </Button>
             </div>
             {templates.length === 0 && <p className="text-xs text-muted-foreground text-center">No templates to export</p>}
@@ -124,13 +128,13 @@ export function ExportView() {
                 <FileJson className="h-5 w-5" /> <span className="text-xs">JSON</span>
               </Button>
               <Button variant="outline" className="h-20 flex-col gap-1" onClick={() => exportHistory('txt')} disabled={history.length === 0}>
-                <FileJson className="h-5 w-5" /> <span className="text-xs">Plain Text</span>
+                <FileText className="h-5 w-5" /> <span className="text-xs">Plain Text</span>
               </Button>
               <Button variant="outline" className="h-20 flex-col gap-1" onClick={() => exportHistory('md')} disabled={history.length === 0}>
-                <FileJson className="h-5 w-5" /> <span className="text-xs">Markdown</span>
+                <FileText className="h-5 w-5" /> <span className="text-xs">Markdown</span>
               </Button>
               <Button variant="outline" className="h-20 flex-col gap-1" onClick={() => exportHistory('csv')} disabled={history.length === 0}>
-                <FileJson className="h-5 w-5" /> <span className="text-xs">CSV</span>
+                <Table className="h-5 w-5" /> <span className="text-xs">CSV</span>
               </Button>
             </div>
             {history.length === 0 && <p className="text-xs text-muted-foreground text-center">No history to export</p>}

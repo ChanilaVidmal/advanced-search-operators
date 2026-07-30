@@ -7,7 +7,7 @@ export function downloadBlob(content: string, filename: string, mime: string) {
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 500);
 }
 
 function blocksToText(operators: OperatorBlock[]): string {

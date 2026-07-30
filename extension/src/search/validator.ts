@@ -23,50 +23,101 @@ export interface ValidationResult {
   query: string;
 }
 
+const opRegex = /(?:^|\s)(AROUND\(\d+\)|OR|AND)(?=\s|$)/gi;
+
+const colonOpRegex = /(site:|filetype:|intitle:|inurl:|intext:|allintitle:|allinurl:|allintext:|related:|define:|source:|location:|before:|after:|daterange:|inanchor:|allinanchor:|ext:|inbody:|cache:|link:|info:|phonebook:|rphonebook:|bphonebook:|inposttitle:|allinposttitle:|inpostauthor:|blogurl:|group:|insubject:|msgid:|weather:|stocks:|map:|movie:|film:|book:)/gi;
+
 export function tokenize(query: string): Token[] {
   const tokens: Token[] = [];
-  const opPattern = /(site:|filetype:|intitle:|inurl:|intext:|allintitle:|allinurl:|allintext:|related:|define:|source:|location:|before:|after:|daterange:|inanchor:|allinanchor:|ext:|inbody:|cache:|link:|info:|phonebook:|rphonebook:|bphonebook:|inposttitle:|allinposttitle:|inpostauthor:|blogurl:|group:|insubject:|msgid:|AROUND|OR|AND|weather:|stocks:|map:|movie:|film:|book:)/gi;
 
-  let pos = 0;
-  const segments: { type: Token['type']; value: string; start: number; end: number }[] = [];
+  if (!query) return tokens;
 
-  let m: RegExpExecArray | null;
-  const regex = new RegExp(opPattern.source, 'gi');
+  // Step 1: Extract quoted regions first
+  const quotedRanges: { start: number; end: number; value: string }[] = [];
+  const quoteRe = /"[^"]*"/g;
+  let qm: RegExpExecArray | null;
+  while ((qm = quoteRe.exec(query)) !== null) {
+    quotedRanges.push({ start: qm.index, end: qm.index + qm[0].length, value: qm[0] });
+  }
 
-  while ((m = regex.exec(query)) !== null) {
-    if (m.index > pos) {
-      const text = query.slice(pos, m.index);
-      segments.push({ type: 'text', value: text, start: pos, end: m.index });
+  function isInsideQuotes(pos: number): boolean {
+    return quotedRanges.some((r) => pos >= r.start && pos < r.end);
+  }
+
+  // Step 2: Extract operators with colons (non-overlapping, skip quoted regions)
+  const colonOps: { start: number; end: number; value: string }[] = [];
+  const cRe = new RegExp(colonOpRegex.source, 'gi');
+  let cm: RegExpExecArray | null;
+  while ((cm = cRe.exec(query)) !== null) {
+    if (!isInsideQuotes(cm.index)) {
+      colonOps.push({ start: cm.index, end: cm.index + cm[0].length, value: cm[0] });
     }
-    segments.push({ type: 'operator', value: m[0], start: m.index, end: m.index + m[0].length });
-    pos = m.index + m[0].length;
   }
 
+  // Step 3: Extract boolean operators (AROUND(N), OR, AND) outside quotes
+  const boolOps: { start: number; end: number; value: string }[] = [];
+  const bRe = new RegExp(opRegex.source, 'gi');
+  let bm: RegExpExecArray | null;
+  while ((bm = bRe.exec(query)) !== null) {
+    if (!isInsideQuotes(bm.index)) {
+      const val = bm[0].trim();
+      boolOps.push({ start: bm.index + (bm[0].length - val.length), end: bm.index + bm[0].length, value: val });
+    }
+  }
+
+  // Step 4: Merge all pre-extracted regions sorted by position
+  const allExtracted: { start: number; end: number; value: string; type: Token['type'] }[] = [
+    ...quotedRanges.map((r) => ({ ...r, type: 'quotes' as Token['type'] })),
+    ...colonOps.map((r) => ({ ...r, type: 'operator' as Token['type'] })),
+    ...boolOps.map((r) => ({ ...r, type: 'operator' as Token['type'] })),
+  ].sort((a, b) => a.start - b.start);
+
+  // Step 5: Walk through the query, emitting tokens
+  let pos = 0;
+  for (const ext of allExtracted) {
+    if (ext.start < pos) continue;
+
+    // Emit text between previous position and this extracted token
+    if (ext.start > pos) {
+      const text = query.slice(pos, ext.start);
+      if (text.trim()) {
+        tokens.push({ type: 'text', value: text.trim(), start: pos, end: ext.start });
+      } else if (text.length > 0 && /^\s+$/.test(text)) {
+        // skip pure whitespace
+      }
+    }
+
+    tokens.push(ext);
+    pos = ext.end;
+  }
+
+  // Emit remaining text
   if (pos < query.length) {
-    segments.push({ type: 'text', value: query.slice(pos), start: pos, end: query.length });
+    const remaining = query.slice(pos).trim();
+    if (remaining) {
+      tokens.push({ type: 'text', value: remaining, start: pos, end: query.length });
+    }
   }
 
-  for (const seg of segments) {
-    if (seg.type === 'text') {
-      let tPos = seg.start;
-      const parts = seg.value.match(/"[^"]*"|\S+/g) || [];
+  // Step 6: Split text tokens into value tokens (split on whitespace)
+  const finalTokens: Token[] = [];
+  for (const t of tokens) {
+    if (t.type === 'text') {
+      const parts = t.value.match(/\S+/g) || [];
+      let offset = 0;
       for (const part of parts) {
-        const idx = seg.value.indexOf(part, tPos - seg.start);
-        const absStart = seg.start + idx;
+        const idx = t.value.indexOf(part, offset);
+        const absStart = t.start + idx;
         const absEnd = absStart + part.length;
-        if (part.startsWith('"') && part.endsWith('"')) {
-          tokens.push({ type: 'quotes', value: part, start: absStart, end: absEnd });
-        } else {
-          tokens.push({ type: 'value', value: part, start: absStart, end: absEnd });
-        }
-        tPos = absEnd;
+        finalTokens.push({ type: 'value', value: part, start: absStart, end: absEnd });
+        offset = idx + part.length;
       }
     } else {
-      tokens.push(seg);
+      finalTokens.push(t);
     }
   }
 
-  return tokens;
+  return finalTokens;
 }
 
 export function validateQuery(query: string): ValidationResult {
@@ -78,13 +129,12 @@ export function validateQuery(query: string): ValidationResult {
     return { valid: true, issues: [], tokens, query };
   }
 
-  // ---- Rule 1: Unknown operators ----
   const operatorTokens = tokens.filter((t) => t.type === 'operator');
+
+  // ---- Rule 1: Unknown operators ----
   for (const token of operatorTokens) {
     const opLower = token.value.toLowerCase();
-    const known = operators.find(
-      (o) => o.operator.toLowerCase() === opLower
-    );
+    const known = operators.find((o) => o.operator.toLowerCase() === opLower);
     if (!known) {
       const suggestion = operators.find((o) =>
         o.operator.toLowerCase().startsWith(opLower.slice(0, 3))
@@ -102,9 +152,7 @@ export function validateQuery(query: string): ValidationResult {
   // ---- Rule 2: Deprecated operators ----
   for (const token of operatorTokens) {
     const opLower = token.value.toLowerCase();
-    const known = operators.find(
-      (o) => o.operator.toLowerCase() === opLower
-    );
+    const known = operators.find((o) => o.operator.toLowerCase() === opLower);
     if (known && known.status === 'deprecated') {
       issues.push({
         type: 'warning',
@@ -185,8 +233,9 @@ export function validateQuery(query: string): ValidationResult {
   };
 }
 
-export function applyFix(_fix: string, query: string): string {
-  return query;
+export function applyFix(fix: string, query: string): string {
+  if (!fix) return query;
+  return fix;
 }
 
 export function getOperatorSuggestions(token: string): Operator[] {

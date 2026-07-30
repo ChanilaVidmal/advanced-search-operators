@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { FolderOpen, Plus, Trash2, Download, Upload, FileSymlink, Edit3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,13 +8,13 @@ import type { Template, OperatorBlock } from '@/types/operator';
 
 const builtInTemplates: Template[] = [
   {
-    id: 'osint',
+    id: 'builtin-osint',
     name: 'OSINT Search',
     description: 'Open source intelligence gathering',
     operators: [
-      { id: '1', operator: 'site:', value: '' },
-      { id: '2', operator: 'filetype:', value: 'pdf' },
-      { id: '3', operator: 'intitle:', value: '' },
+      { id: 'b1', operator: 'site:', value: '' },
+      { id: 'b2', operator: 'filetype:', value: 'pdf' },
+      { id: 'b3', operator: 'intitle:', value: '' },
     ],
     tags: ['osint', 'intelligence'],
     builtin: true,
@@ -22,13 +22,13 @@ const builtInTemplates: Template[] = [
     updatedAt: '2024-01-01',
   },
   {
-    id: 'research',
+    id: 'builtin-research',
     name: 'Research Papers',
     description: 'Find academic research papers',
     operators: [
-      { id: '1', operator: 'site:', value: 'scholar.google.com' },
-      { id: '2', operator: 'filetype:', value: 'pdf' },
-      { id: '3', operator: 'intitle:', value: 'research' },
+      { id: 'b4', operator: 'site:', value: 'scholar.google.com' },
+      { id: 'b5', operator: 'filetype:', value: 'pdf' },
+      { id: 'b6', operator: 'intitle:', value: 'research' },
     ],
     tags: ['research', 'academic'],
     builtin: true,
@@ -36,12 +36,12 @@ const builtInTemplates: Template[] = [
     updatedAt: '2024-01-01',
   },
   {
-    id: 'pdf-search',
+    id: 'builtin-pdf-search',
     name: 'PDF Search',
     description: 'Search for PDF documents',
     operators: [
-      { id: '1', operator: 'filetype:', value: 'pdf' },
-      { id: '2', operator: 'intext:', value: '' },
+      { id: 'b7', operator: 'filetype:', value: 'pdf' },
+      { id: 'b8', operator: 'intext:', value: '' },
     ],
     tags: ['pdf', 'documents'],
     builtin: true,
@@ -49,13 +49,13 @@ const builtInTemplates: Template[] = [
     updatedAt: '2024-01-01',
   },
   {
-    id: 'bug-bounty',
+    id: 'builtin-bug-bounty',
     name: 'Bug Hunting',
     description: 'Bug bounty and vulnerability research',
     operators: [
-      { id: '1', operator: 'site:', value: '' },
-      { id: '2', operator: 'inurl:', value: 'admin' },
-      { id: '3', operator: 'intitle:', value: 'login' },
+      { id: 'b9', operator: 'site:', value: '' },
+      { id: 'b10', operator: 'inurl:', value: 'admin' },
+      { id: 'b11', operator: 'intitle:', value: 'login' },
     ],
     tags: ['security', 'bug-bounty'],
     builtin: true,
@@ -73,6 +73,8 @@ export function Templates() {
   const [formDesc, setFormDesc] = useState('');
   const [formTags, setFormTags] = useState('');
   const [notification, setNotification] = useState('');
+  const notifyTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(notifyTimer.current), []);
 
   const allTemplates = [...builtInTemplates, ...templates];
   const filtered = search
@@ -85,11 +87,12 @@ export function Templates() {
 
   const notify = (msg: string) => {
     setNotification(msg);
-    setTimeout(() => setNotification(''), 2500);
+    clearTimeout(notifyTimer.current);
+    notifyTimer.current = setTimeout(() => setNotification(''), 2500);
   };
 
   const handleDelete = (id: string) => {
-    setTemplates(templates.filter((t) => t.id !== id));
+    setTemplates((prev) => prev.filter((t) => t.id !== id));
   };
 
   const openCreate = () => {
@@ -109,8 +112,8 @@ export function Templates() {
   const handleSaveDialog = () => {
     const now = new Date().toISOString();
     if (dialog.editId) {
-      setTemplates(
-        templates.map((t) =>
+      setTemplates((prev) =>
+        prev.map((t) =>
           t.id === dialog.editId
             ? { ...t, name: formName, description: formDesc, tags: formTags.split(',').map((s) => s.trim()).filter(Boolean), updatedAt: now }
             : t
@@ -128,16 +131,21 @@ export function Templates() {
         createdAt: now,
         updatedAt: now,
       };
-      setTemplates([...templates, newTpl]);
+      setTemplates((prev) => [...prev, newTpl]);
       notify('Template created');
     }
     setDialog({ open: false });
   };
 
   const handleLoad = (tpl: Template) => {
-    chrome.storage?.sync?.set({ builderBlocks: tpl.operators });
-    localStorage.setItem('builderBlocks', JSON.stringify(tpl.operators));
-    notify(`"${tpl.name}" loaded — switch to Builder`);
+    const hasChrome = typeof chrome !== 'undefined' && chrome.storage?.sync;
+    if (hasChrome) {
+      chrome.storage.sync.set({ builderBlocks: tpl.operators });
+      notify(`"${tpl.name}" loaded — switch to Builder`);
+    } else {
+      localStorage.setItem('builderBlocks', JSON.stringify(tpl.operators));
+      notify(`"${tpl.name}" loaded — switch to Builder`);
+    }
   };
 
   const handleExport = () => {
@@ -148,7 +156,7 @@ export function Templates() {
     a.href = url;
     a.download = `search-templates-${Date.now()}.json`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 500);
     notify('Exported templates');
   };
 
@@ -171,7 +179,7 @@ export function Templates() {
             createdAt: t.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           }));
-          setTemplates([...templates, ...withIds]);
+          setTemplates((prev) => [...prev, ...withIds]);
           notify(`Imported ${withIds.length} template(s)`);
         } catch {
           notify('Invalid JSON file');

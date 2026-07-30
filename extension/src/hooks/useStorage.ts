@@ -28,13 +28,15 @@ export function useStorage<T>(key: string, initialValue: T): [T, (value: T | ((p
   }, [key]);
 
   const updateValue = (newValue: T | ((prev: T) => T)) => {
-    const resolvedValue = newValue instanceof Function ? newValue(value) : newValue;
-    setValue(resolvedValue);
-    if (hasChromeStorage) {
-      chrome.storage.sync.set({ [key]: resolvedValue });
-    } else {
-      localStorage.setItem(key, JSON.stringify(resolvedValue));
-    }
+    setValue((prev) => {
+      const resolved = newValue instanceof Function ? newValue(prev) : newValue;
+      if (hasChromeStorage) {
+        chrome.storage.sync.set({ [key]: resolved });
+      } else {
+        localStorage.setItem(key, JSON.stringify(resolved));
+      }
+      return resolved;
+    });
   };
 
   return [value, updateValue, loaded];

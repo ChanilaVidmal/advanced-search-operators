@@ -76,25 +76,33 @@ export function QueryValidator() {
                   Issues ({result.issues.length})
                 </h3>
                 {result.issues.map((issue, i) => (
-                  <IssueCard key={i} issue={issue} />
+                  <IssueCard key={i} issue={issue} onApply={(fix) => {
+                    if (issue.token && issue.fix) {
+                      const { start, end } = issue.token;
+                      const fixVal = fix.replace(/^Did you mean /, '').replace(/["']/g, '');
+                      setQuery(query.slice(0, start) + fixVal + query.slice(end));
+                    }
+                  }} />
                 ))}
               </div>
             )}
 
-            {/* Actions */}
-            {result.issues.length > 0 && (
+            {result.issues.filter((i) => i.fix && i.token).length > 0 && (
               <Button
                 variant="outline"
                 className="w-full"
                 onClick={() => {
-                  const fixes = result.issues.filter((i) => i.fix);
-                  if (fixes.length > 0) {
-                    setQuery(fixes[0].fix || query);
-                  }
+                  const fixable = result.issues.find((i) => i.fix && i.token);
+                  if (!fixable || !fixable.token || !fixable.fix) return;
+                  const { start, end } = fixable.token;
+                  const before = query.slice(0, start);
+                  const after = query.slice(end);
+                  const fixVal = fixable.fix.replace(/^Did you mean /, '').replace(/["']/g, '');
+                  setQuery(`${before}${fixVal}${after}`);
                 }}
               >
                 <Lightbulb className="h-4 w-4 mr-2" />
-                Apply first suggestion
+                Apply first fix
               </Button>
             )}
           </div>
@@ -107,7 +115,10 @@ export function QueryValidator() {
 function HighlightedQuery({ query, tokens, issues }: { query: string; tokens: Token[]; issues: ValidationIssue[] }) {
   if (!query.trim()) return null;
 
-  const issueTokens = new Set(issues.filter((i) => i.token).map((i) => i.token!.start));
+  const issueStarts = new Set(issues.filter((i) => i.token).map((i) => i.token!.start));
+  const getIssueClass = (token: Token) => {
+    return issueStarts.has(token.start) ? 'text-destructive bg-destructive/10' : 'text-primary';
+  };
 
   return (
     <div className="rounded-lg border bg-card p-3">
@@ -116,11 +127,11 @@ function HighlightedQuery({ query, tokens, issues }: { query: string; tokens: To
         {tokens.length === 0 ? (
           <span className="text-muted-foreground">{query}</span>
         ) : (
-          tokens.map((token, i) => {
+            tokens.map((token, i) => {
             let color = '';
             switch (token.type) {
               case 'operator':
-                color = issueTokens.has(token.start) ? 'text-destructive bg-destructive/10' : 'text-primary';
+                color = getIssueClass(token);
                 break;
               case 'quotes':
                 color = 'text-green-600 dark:text-green-400';
@@ -147,8 +158,17 @@ function HighlightedQuery({ query, tokens, issues }: { query: string; tokens: To
   );
 }
 
-function IssueCard({ issue }: { issue: ValidationIssue }) {
+function IssueCard({ issue, onApply }: { issue: ValidationIssue; onApply?: (fix: string) => void }) {
   const [applied, setApplied] = useState(false);
+
+  const handleClick = () => {
+    if (issue.fix) {
+      setApplied(true);
+      if (issue.token && onApply) {
+        onApply(issue.fix);
+      }
+    }
+  };
 
   return (
     <div className={cn(
@@ -176,7 +196,7 @@ function IssueCard({ issue }: { issue: ValidationIssue }) {
           {issue.fix && !applied && (
             <button
               className="mt-1.5 text-xs text-primary hover:underline inline-flex items-center gap-1"
-              onClick={() => setApplied(true)}
+              onClick={handleClick}
             >
               <Lightbulb className="h-3 w-3" />
               {issue.fix}
