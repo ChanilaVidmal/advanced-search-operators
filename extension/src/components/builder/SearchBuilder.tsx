@@ -1,13 +1,15 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Plus, Trash2, Copy, ExternalLink, GripVertical, FileSymlink, AlertCircle, Save } from 'lucide-react';
+import { Plus, Trash2, Copy, ExternalLink, GripVertical, FileSymlink, AlertCircle, Save, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AutocompleteInput } from '@/components/ui/AutocompleteInput';
 import { Dialog } from '@/components/ui/Dialog';
 import { operators, searchOperators } from '@/data/operators';
+import { getOperatorsForEngine } from '@/data/engineOperators';
 import { engines, defaultEngineId, getEngine, getEngineSearchUrl } from '@/data/engines';
 import { useStorage } from '@/hooks/useStorage';
 import { validateQuery } from '@/search/validator';
+import { parseNaturalLanguage } from '@/search/nlParser';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -202,10 +204,28 @@ export function SearchBuilder() {
 
   const engineCategories = useMemo(() => getEngine(safeEngineId).categories, [safeEngineId]);
 
+  const allEngineOps = useMemo(() => getOperatorsForEngine(safeEngineId), [safeEngineId]);
+
+  const [nlInput, setNlInput] = useState('');
+  const [showNl, setShowNl] = useState(false);
+
+  const handleNlParse = useCallback(() => {
+    const result = parseNaturalLanguage(nlInput);
+    if (!result || result.blocks.length === 0) return;
+    setBlocks((prev) => [...prev, ...result.blocks]);
+    setNlInput('');
+    setShowNl(false);
+  }, [nlInput, setBlocks]);
+
   const availableOperators = useMemo(() => {
-    const filtered = operators.filter((op) => engineCategories.includes(op.category));
-    return pickerSearch ? searchOperators(pickerSearch).filter((op) => engineCategories.includes(op.category)) : filtered;
-  }, [pickerSearch, engineCategories]);
+    const filtered = [
+      ...operators.filter((op) => engineCategories.includes(op.category)),
+      ...allEngineOps,
+    ];
+    return pickerSearch
+      ? searchOperators(pickerSearch).concat(allEngineOps.filter((op) => op.operator.toLowerCase().includes(pickerSearch.toLowerCase()) || op.name.toLowerCase().includes(pickerSearch.toLowerCase())))
+      : filtered;
+  }, [pickerSearch, engineCategories, allEngineOps]);
 
 
 
@@ -228,6 +248,36 @@ export function SearchBuilder() {
           </select>
         </div>
       </div>
+
+      {/* NL input toggle */}
+      <button
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 border-b transition-colors w-full"
+        onClick={() => setShowNl(!showNl)}
+      >
+        <Wand2 className="h-3.5 w-3.5" />
+        {showNl ? 'Close' : 'Describe in plain English'}
+      </button>
+
+      {showNl && (
+        <div className="border-b p-3 space-y-2">
+          <Input
+            value={nlInput}
+            onChange={(e) => setNlInput(e.target.value)}
+            placeholder='e.g. "PDFs from mit.edu about AI after 2022"'
+            className="text-sm"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === 'Enter') handleNlParse(); }}
+          />
+          <div className="flex gap-2">
+            <Button size="sm" className="flex-1" onClick={handleNlParse} disabled={!nlInput.trim()}>
+              <Wand2 className="h-3.5 w-3.5 mr-1.5" /> Generate
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => { setNlInput(''); setShowNl(false); }}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Validation bar */}
       {validationIssues.length > 0 && (
