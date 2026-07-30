@@ -2,13 +2,14 @@ import { useState, useMemo, useCallback } from 'react';
 import { Plus, Trash2, Copy, ExternalLink, GripVertical, FileSymlink, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { AutocompleteInput } from '@/components/ui/AutocompleteInput';
 import { operators, searchOperators } from '@/data/operators';
 import { useStorage } from '@/hooks/useStorage';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Operator, OperatorBlock } from '@/types/operator';
-import { CATEGORY_LABELS } from '@/types/operator';
+
 
 interface ValidationIssue {
   type: 'error' | 'warning';
@@ -252,34 +253,16 @@ export function SearchBuilder() {
         {showPicker && (
           <div className="rounded-lg border bg-card shadow-lg">
             <div className="p-2 border-b">
-              <Input
+              <AutocompleteInput
                 value={pickerSearch}
                 onChange={(e) => setPickerSearch(e.target.value)}
+                onSelect={(op) => addBlock(op)}
+                suggestions={availableOperators}
                 placeholder="Search operators..."
                 className="h-8 text-sm"
+                showIcon={false}
                 autoFocus
               />
-            </div>
-            <div className="max-h-48 overflow-y-auto">
-              {availableOperators.length === 0 ? (
-                <p className="p-3 text-sm text-muted-foreground">No operators found</p>
-              ) : (
-                availableOperators.map((op) => (
-                  <button
-                    key={op.id}
-                    onClick={() => addBlock(op)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
-                  >
-                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-primary shrink-0">
-                      {op.operator}
-                    </code>
-                    <span className="text-foreground truncate">{op.name}</span>
-                    <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
-                      {CATEGORY_LABELS[op.category]}
-                    </span>
-                  </button>
-                ))
-              )}
             </div>
           </div>
         )}
