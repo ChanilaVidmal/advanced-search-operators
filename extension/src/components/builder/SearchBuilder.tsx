@@ -10,7 +10,7 @@ import { validateQuery } from '@/search/validator';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { Operator, OperatorBlock, Template } from '@/types/operator';
+import type { Operator, OperatorBlock, Template, HistoryEntry } from '@/types/operator';
 
 function SortableBlock({ block, onUpdateValue, onRemove, onDuplicate }: {
   block: OperatorBlock;
@@ -140,7 +140,26 @@ export function SearchBuilder() {
 
   const handleSearch = useCallback(() => {
     chrome.tabs.create({ url: `https://www.google.com/search?q=${encodeURIComponent(query)}` });
-  }, [query]);
+    const entry: HistoryEntry = {
+      id: crypto.randomUUID(),
+      query,
+      operators: blocks,
+      timestamp: new Date().toISOString(),
+      pinned: false,
+      favorite: false,
+      tags: [],
+    };
+    const hasChrome = typeof chrome !== 'undefined' && chrome.storage?.sync;
+    if (hasChrome) {
+      chrome.storage.sync.get(['history'], (result: Record<string, unknown>) => {
+        const existing = (result.history as HistoryEntry[]) || [];
+        chrome.storage.sync.set({ history: [entry, ...existing].slice(0, 200) });
+      });
+    } else {
+      const existing: HistoryEntry[] = JSON.parse(localStorage.getItem('history') || '[]');
+      localStorage.setItem('history', JSON.stringify([entry, ...existing].slice(0, 200)));
+    }
+  }, [query, blocks]);
 
   const handleClear = useCallback(() => {
     setBlocks([]);
