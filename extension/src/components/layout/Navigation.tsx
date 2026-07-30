@@ -1,6 +1,6 @@
-import { Search, LayoutDashboard, FolderOpen, History, Settings } from 'lucide-react';
+import { Search, LayoutDashboard, FolderOpen, History, Settings, SearchCheck } from 'lucide-react';
 
-type TabId = 'explorer' | 'builder' | 'templates' | 'history' | 'settings';
+type TabId = 'explorer' | 'builder' | 'templates' | 'history' | 'settings' | 'validator';
 
 interface NavigationProps {
   activeTab: TabId;
@@ -13,6 +13,7 @@ const tabs = [
   { id: 'templates' as const, label: 'Templates', icon: FolderOpen },
   { id: 'history' as const, label: 'History', icon: History },
   { id: 'settings' as const, label: 'Settings', icon: Settings },
+  { id: 'validator' as const, label: 'Validator', icon: SearchCheck },
 ];
 
 export function Navigation({ activeTab, onTabChange }: NavigationProps) {

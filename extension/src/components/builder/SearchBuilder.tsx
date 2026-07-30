@@ -1,21 +1,16 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Plus, Trash2, Copy, ExternalLink, GripVertical, FileSymlink, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Copy, ExternalLink, GripVertical, FileSymlink, AlertCircle, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AutocompleteInput } from '@/components/ui/AutocompleteInput';
+import { Dialog } from '@/components/ui/Dialog';
 import { operators, searchOperators } from '@/data/operators';
 import { useStorage } from '@/hooks/useStorage';
+import { validateQuery } from '@/search/validator';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { Operator, OperatorBlock } from '@/types/operator';
-
-
-interface ValidationIssue {
-  type: 'error' | 'warning';
-  message: string;
-  blockId?: string;
-}
+import type { Operator, OperatorBlock, Template } from '@/types/operator';
 
 function SortableBlock({ block, onUpdateValue, onRemove, onDuplicate }: {
   block: OperatorBlock;
@@ -62,36 +57,8 @@ function SortableBlock({ block, onUpdateValue, onRemove, onDuplicate }: {
   );
 }
 
-function validateBlocks(blocks: OperatorBlock[]): ValidationIssue[] {
-  const issues: ValidationIssue[] = [];
-
-  if (blocks.length === 0) return issues;
-
-  const operatorCount = new Map<string, string[]>();
-  for (const block of blocks) {
-    const key = block.operator;
-    if (!operatorCount.has(key)) operatorCount.set(key, []);
-    operatorCount.get(key)!.push(block.id);
-  }
-
-  for (const [op, ids] of operatorCount) {
-    if (ids.length > 1) {
-      issues.push({
-        type: 'warning',
-        message: `Duplicate operator "${op}" used ${ids.length} times`,
-        blockId: ids[0],
-      });
-    }
-  }
-
-  if (blocks.some((b) => b.operatorData?.status === 'deprecated')) {
-    issues.push({
-      type: 'warning',
-      message: 'Query contains deprecated operator(s)',
-    });
-  }
-
-  return issues;
+function useQueryValidation(query: string) {
+  return useMemo(() => validateQuery(query), [query]);
 }
 
 export function SearchBuilder() {
@@ -109,7 +76,7 @@ export function SearchBuilder() {
     [blocks]
   );
 
-  const validationIssues = useMemo(() => validateBlocks(blocks), [blocks]);
+  const { issues: validationIssues, valid: queryValid } = useQueryValidation(query);
 
   const addBlock = useCallback((op: Operator) => {
     setBlocks((prev: OperatorBlock[]) => [
@@ -179,12 +146,38 @@ export function SearchBuilder() {
     setBlocks([]);
   }, [setBlocks]);
 
+  const [saveDialog, setSaveDialog] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [saveDesc, setSaveDesc] = useState('');
+  const [saveTags, setSaveTags] = useState('');
+  const [templates, setTemplates] = useStorage<Template[]>('templates', []);
+
+  const handleSaveTemplate = () => {
+    if (!saveName.trim()) return;
+    const now = new Date().toISOString();
+    const tpl: Template = {
+      id: crypto.randomUUID(),
+      name: saveName.trim(),
+      description: saveDesc.trim(),
+      operators: blocks.map((b) => ({ ...b })),
+      tags: saveTags.split(',').map((s) => s.trim()).filter(Boolean),
+      builtin: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setTemplates([...templates, tpl]);
+    setSaveDialog(false);
+    setSaveName('');
+    setSaveDesc('');
+    setSaveTags('');
+  };
+
   const availableOperators = useMemo(
     () => (pickerSearch ? searchOperators(pickerSearch) : operators),
     [pickerSearch]
   );
 
-  const hasErrors = validationIssues.some((i) => i.type === 'error');
+
 
   return (
     <div className="flex h-full flex-col">
@@ -243,7 +236,7 @@ export function SearchBuilder() {
             <Button variant="outline" size="icon" onClick={handleCopy} title="Copy query">
               <Copy className="h-4 w-4" />
             </Button>
-            <Button size="icon" onClick={handleSearch} title="Search Google" disabled={hasErrors}>
+            <Button size="icon" onClick={handleSearch} title="Search Google" disabled={!queryValid}>
               <ExternalLink className="h-4 w-4" />
             </Button>
           </div>
@@ -277,9 +270,14 @@ export function SearchBuilder() {
             <Plus className="h-4 w-4 mr-2" /> Add Operator
           </Button>
           {blocks.length > 0 && (
-            <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={handleClear}>
-              Clear All
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => { setSaveName(''); setSaveDesc(''); setSaveTags(''); setSaveDialog(true); }} title="Save as template">
+                <Save className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={handleClear}>
+                Clear All
+              </Button>
+            </>
           )}
         </div>
 
@@ -289,6 +287,27 @@ export function SearchBuilder() {
             {blocks.length} block{blocks.length !== 1 ? 's' : ''} · Drag to reorder
           </p>
         )}
+
+        <Dialog open={saveDialog} onClose={() => setSaveDialog(false)} title="Save as Template">
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Name</label>
+              <Input value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="My Search Template" autoFocus />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Description</label>
+              <Input value={saveDesc} onChange={(e) => setSaveDesc(e.target.value)} placeholder="What this template does..." />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Tags (comma-separated)</label>
+              <Input value={saveTags} onChange={(e) => setSaveTags(e.target.value)} placeholder="osint, research, pdf" />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" className="flex-1" onClick={() => setSaveDialog(false)}>Cancel</Button>
+              <Button className="flex-1" onClick={handleSaveTemplate} disabled={!saveName.trim()}>Save</Button>
+            </div>
+          </div>
+        </Dialog>
       </div>
     </div>
   );
