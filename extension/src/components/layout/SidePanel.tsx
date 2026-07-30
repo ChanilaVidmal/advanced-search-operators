@@ -6,9 +6,10 @@ import { Templates } from '@/components/templates/Templates';
 import { History } from '@/components/history/History';
 import { Settings } from '@/components/settings/Settings';
 import { QueryValidator } from '@/components/validator/QueryValidator';
+import { ExportView } from '@/components/export/ExportView';
 import { useState } from 'react';
 
-type Tab = 'explorer' | 'builder' | 'templates' | 'history' | 'settings' | 'validator';
+type Tab = 'explorer' | 'builder' | 'templates' | 'history' | 'settings' | 'validator' | 'export';
 
 export function SidePanel() {
   const [activeTab, setActiveTab] = useState<Tab>('explorer');
@@ -23,6 +24,7 @@ export function SidePanel() {
         {activeTab === 'templates' && <Templates />}
         {activeTab === 'history' && <History />}
         {activeTab === 'validator' && <QueryValidator />}
+        {activeTab === 'export' && <ExportView />}
         {activeTab === 'settings' && <Settings />}
       </div>
     </div>
